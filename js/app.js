@@ -12,6 +12,11 @@
   const KEY_SETTINGS = 'sudoku.settings';
   const KEY_POOL = 'sudoku.pool';
   const KEY_SCORES = 'sudoku.scores';
+  const KEY_SEEN = 'sudoku.seen';
+  const PIC_SUBS = [
+    'ImaginaryLandscapes', 'LiminalSpace', 'AbandonedPorn', 'CityPorn', 'streetphotography',
+    'ExposurePorn', 'WeatherPorn', 'SpacePorn', 'EarthPorn', 'analog', 'itookapicture',
+  ];
 
   const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
   const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>';
@@ -45,6 +50,7 @@
     ['areas', 'Highlight areas'],
     ['same', 'Highlight identical numbers'],
     ['timer', 'Timer'],
+    ['pictures', 'Win pictures'],
   ];
 
   const settings = Object.assign({
@@ -55,6 +61,7 @@
     areas: true,
     same: true,
     timer: true,
+    pictures: true,
   }, store.get(KEY_SETTINGS, {}));
 
   function applyTheme() {
@@ -105,6 +112,72 @@
     const keep = new Set(DIFFS.map((d) => bestScore(list, d, 0)));
     store.set(KEY_SCORES, list.filter((e) => e.at >= weekStart || keep.has(e)));
     return record;
+  }
+
+  /* ---------- Win pictures (random Reddit photo via meme-api, Picsum fallback) ---------- */
+
+  let picPromise = null;
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(url);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  async function fetchPicture() {
+    const seen = store.get(KEY_SEEN, []);
+    for (let tries = 0; tries < 3; tries++) {
+      const sub = PIC_SUBS[(Math.random() * PIC_SUBS.length) | 0];
+      try {
+        const res = await fetch(`https://meme-api.com/gimme/${sub}/10`);
+        const data = await res.json();
+        const posts = (data.memes || []).filter((m) => /\.(jpe?g|png|gif|webp)$/i.test(m.url) && !seen.includes(m.postLink));
+        if (!posts.length) continue;
+        const m = posts[(Math.random() * posts.length) | 0];
+        await loadImage(m.url);
+        return { url: m.url, credit: 'r/' + m.subreddit, link: m.postLink, title: m.title };
+      } catch (e) { /* try another subreddit */ }
+    }
+    const url = `https://picsum.photos/1600/1000?random=${Date.now()}`;
+    await loadImage(url);
+    return { url, credit: 'Picsum', link: 'https://picsum.photos' };
+  }
+
+  function preparePicture() {
+    picPromise = settings.pictures ? fetchPicture().catch(() => null) : null;
+  }
+
+  function takePicture() {
+    const p = picPromise;
+    picPromise = null;
+    if (!p) return Promise.resolve(null);
+    return Promise.race([p, new Promise((r) => setTimeout(() => r(null), 2500))]);
+  }
+
+  function showPicture(pic) {
+    $('picImg').src = pic.url;
+    $('picBg').src = pic.url;
+    const credit = $('picCredit');
+    credit.textContent = pic.credit;
+    credit.href = pic.link;
+    credit.title = pic.title ? pic.title.replace(/&amp;/g, '&') : '';
+    $('pic').hidden = false;
+    modalEl.classList.add('with-pic');
+    if (pic.link.includes('redd')) {
+      const seen = store.get(KEY_SEEN, []);
+      seen.push(pic.link);
+      store.set(KEY_SEEN, seen.slice(-200));
+    }
+  }
+
+  function hidePicture() {
+    modalEl.classList.remove('with-pic', 'peek');
+    $('pic').hidden = true;
+    $('picImg').removeAttribute('src');
+    $('picBg').removeAttribute('src');
   }
 
   /* ---------- Puzzle generation (worker with sync fallback) ---------- */
@@ -503,7 +576,8 @@
     sel = -1;
     update();
     for (let i = 0; i < 81; i++) flash(i, (S.ROW[i] + S.COL[i]) * 40);
-    setTimeout(showWon, 900);
+    const pic = takePicture();
+    setTimeout(() => pic.then(showWon), 900);
   }
 
   /* ---------- Games ---------- */
@@ -522,6 +596,7 @@
       busyDiff = null;
       update();
       fillPool();
+      preparePicture();
     });
   }
 
@@ -561,6 +636,7 @@
   let modalLocked = false;
 
   function openModal(html, actions, locked) {
+    hidePicture();
     cardEl.innerHTML = html;
     modalActions = actions || {};
     modalLocked = !!locked;
@@ -570,6 +646,7 @@
   }
 
   function closeModal() {
+    hidePicture();
     modalEl.hidden = true;
     cardEl.innerHTML = '';
     modalActions = {};
@@ -579,6 +656,10 @@
   const modalOpen = () => !modalEl.hidden;
 
   modalEl.addEventListener('click', (e) => {
+    if (e.target.closest('#pic') && !e.target.closest('#picCredit')) {
+      modalEl.classList.toggle('peek');
+      return;
+    }
     if (e.target === modalEl) {
       if (!modalLocked) closeModal();
       return;
@@ -622,6 +703,7 @@
       inp.addEventListener('change', () => {
         settings[inp.dataset.key] = inp.checked;
         store.set(KEY_SETTINGS, settings);
+        if (inp.dataset.key === 'pictures') preparePicture();
         applyTheme();
         if (game && game.status === 'lost' && !settings.mistakeLimit) game.status = 'playing';
         update();
@@ -629,7 +711,7 @@
     });
   }
 
-  function showWon() {
+  function showWon(pic) {
     if (!game || game.status !== 'won') return;
     openModal(`
       <div class="result">
@@ -643,6 +725,7 @@
         <button class="btn primary" data-act="again">New Game</button>
         <button class="btn" data-act="scores">High scores</button>
       </div>`, { again: () => newGame(game.diff), scores: () => showScores() });
+    if (pic) showPicture(pic);
     if (game.record) cardEl.querySelector('h2').insertAdjacentHTML('afterend', `<span class="chip">${game.record}</span>`);
   }
 
@@ -742,6 +825,7 @@
     game = saved;
     update();
     fillPool();
+    preparePicture();
   } else {
     newGame(saved && DIFFS.includes(saved.diff) ? saved.diff : 'easy');
   }

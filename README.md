@@ -7,6 +7,7 @@ A clean, static Sudoku game in six difficulty levels (Easy → Extreme). No buil
 - Unique-solution puzzles, generated in the browser (Web Worker) and graded by solving technique
 - Mistake limit (3), score with speed bonus, timer with pause, undo, erase, notes, 3 hints
 - High scores per difficulty: today, this week and all time (stored in the browser)
+- Win pictures: a random photo from a mix of subreddits via [meme-api](https://meme-api.com) (may include NSFW content; can be turned off in settings), with Picsum as fallback
 - Highlighting of row/column/box, identical numbers and duplicates
 - Auto-save and resume, light/dark theme, keyboard support (1–9, arrows, Backspace, N, Ctrl+Z, Space)
 
