@@ -1,0 +1,43 @@
+name: Update pictures
+
+on:
+  schedule:
+    - cron: '23 4 * * *' # daily, 04:23 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tools/subreddits.txt', 'tools/update_pictures.py']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-pictures
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch pictures from Reddit RSS
+        run: python tools/update_pictures.py
+
+      - name: Commit pictures.json if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pictures.json
+          if git diff --cached --quiet; then
+            echo 'No changes'
+          else
+            git commit -m 'Update pictures'
+            git pull --rebase
+            git push
+          fi

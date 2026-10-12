@@ -1,0 +1,3 @@
+# Subreddits used for win pictures, one per line.
+# After editing, run: python tools/update_pictures.py
+Art

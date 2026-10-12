@@ -436,7 +436,7 @@ svg {
   font-size: 15px;
 }
 .setting + .setting { border-top: 1px solid var(--thin); }
-.setting input { position: absolute; opacity: 0; pointer-events: none; }
+.setting input[type="checkbox"] { position: absolute; opacity: 0; pointer-events: none; }
 .switch {
   position: relative;
   flex: none;
@@ -529,6 +529,39 @@ svg {
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
+
+.seg.small { grid-template-columns: repeat(2, 1fr); width: 96px; margin: 0; }
+.seg.small button { padding: 4px 0; }
+
+.setting[hidden] { display: none; }
+.sub-input {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  width: 168px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--thin);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: text;
+}
+.sub-input:focus-within { border-color: var(--accent); }
+.sub-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+.sub-state { flex: none; width: 16px; height: 16px; font-style: normal; font-size: 14px; line-height: 16px; text-align: center; }
+.sub-state.ok::after { content: "\2713"; color: var(--user); }
+.sub-state.bad::after { content: "\2717"; color: var(--wrong); }
+.sub-state.checking { border: 2px solid var(--btn); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
 .scores { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .scores tr + tr { border-top: 1px solid var(--thin); }

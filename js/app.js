@@ -7,16 +7,12 @@
   const POINTS = { easy: 50, medium: 75, hard: 100, expert: 150, master: 200, extreme: 250 };
   const PAR = { easy: 240, medium: 420, hard: 600, expert: 900, master: 1200, extreme: 1500 };
   const MAX_MISTAKES = 3;
-  const MAX_HINTS = 3;
+  const HINT_OPTIONS = [3, 7];
   const KEY_GAME = 'sudoku.game';
   const KEY_SETTINGS = 'sudoku.settings';
   const KEY_POOL = 'sudoku.pool';
   const KEY_SCORES = 'sudoku.scores';
   const KEY_SEEN = 'sudoku.seen';
-  const PIC_SUBS = [
-    'ImaginaryLandscapes', 'LiminalSpace', 'AbandonedPorn', 'CityPorn', 'streetphotography',
-    'ExposurePorn', 'WeatherPorn', 'SpacePorn', 'EarthPorn', 'analog', 'itookapicture',
-  ];
 
   const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
   const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>';
@@ -51,6 +47,7 @@
     ['same', 'Highlight identical numbers'],
     ['timer', 'Timer'],
     ['pictures', 'Win pictures'],
+    ['nsfw', 'NSFW pictures'],
   ];
 
   const settings = Object.assign({
@@ -62,7 +59,12 @@
     same: true,
     timer: true,
     pictures: true,
+    nsfw: false,
+    sub: '', // empty = the prepared subreddits in pictures.json
+    hints: 3,
   }, store.get(KEY_SETTINGS, {}));
+  if (!HINT_OPTIONS.includes(settings.hints)) settings.hints = HINT_OPTIONS[0];
+  if (typeof settings.sub !== 'string') settings.sub = '';
 
   function applyTheme() {
     document.documentElement.dataset.theme = settings.dark ? 'dark' : 'light';
@@ -114,9 +116,20 @@
     return record;
   }
 
-  /* ---------- Win pictures (random Reddit photo via meme-api, Picsum fallback) ---------- */
+  /* ---------- Win pictures ----------
+     pictures.json is built from Reddit RSS feeds by tools/update_pictures.py (daily GitHub Action),
+     since the browser cannot read Reddit directly. Picsum is the fallback. */
 
   let picPromise = null;
+  let picData = null;
+  const picDataPromise = fetch('pictures.json', { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && Array.isArray(d.subs) && Array.isArray(d.pictures)) picData = d;
+      return picData;
+    })
+    .catch(() => null);
+  const picSubs = () => (picData ? picData.subs : []);
 
   function loadImage(url) {
     return new Promise((resolve, reject) => {
@@ -127,19 +140,55 @@
     });
   }
 
-  async function fetchPicture() {
-    const seen = store.get(KEY_SEEN, []);
-    for (let tries = 0; tries < 3; tries++) {
-      const sub = PIC_SUBS[(Math.random() * PIC_SUBS.length) | 0];
+  const pick = (list) => list[(Math.random() * list.length) | 0];
+  const SUB_NAME = /^[A-Za-z0-9_]{2,21}$/;
+  const normalizeSub = (v) => v.trim().replace(/^\/?r\//i, '').replace(/\/$/, '');
+  const preparedSub = (name) => picSubs().find((s) => s.toLowerCase() === name.toLowerCase());
+  const decodeHtml = (t) => new DOMParser().parseFromString(t, 'text/html').documentElement.textContent;
+
+  /* Live fallback for subreddits that are not in pictures.json. meme-api allows browser
+     requests but only knows a handful of current posts per subreddit. */
+  async function memePosts(sub) {
+    const res = await fetch(`https://meme-api.com/gimme/${encodeURIComponent(sub)}/50`);
+    const data = await res.json();
+    return (data.memes || [])
+      .filter((m) => /\.(jpe?g|png|gif|webp)$/i.test(m.url))
+      .map((m) => ({ url: m.url, link: m.postLink, title: decodeHtml(m.title), sub: m.subreddit, nsfw: m.nsfw }));
+  }
+
+  async function candidatePictures() {
+    const data = await picDataPromise;
+    const prepared = settings.sub ? preparedSub(settings.sub) : null;
+    if (settings.sub && !prepared) {
       try {
-        const res = await fetch(`https://meme-api.com/gimme/${sub}/10`);
-        const data = await res.json();
-        const posts = (data.memes || []).filter((m) => /\.(jpe?g|png|gif|webp)$/i.test(m.url) && !seen.includes(m.postLink));
-        if (!posts.length) continue;
-        const m = posts[(Math.random() * posts.length) | 0];
-        await loadImage(m.url);
-        return { url: m.url, credit: 'r/' + m.subreddit, link: m.postLink, title: m.title };
-      } catch (e) { /* try another subreddit */ }
+        const posts = await memePosts(settings.sub);
+        if (posts.length) return posts;
+      } catch (e) { /* fall back to the prepared pictures */ }
+    }
+    if (!data) return [];
+    const subs = prepared ? [prepared] : picSubs();
+    return data.pictures.filter((p) => subs.includes(p.sub));
+  }
+
+  async function fetchPicture() {
+    const candidates = await candidatePictures();
+    if (candidates.length) {
+      const seen = store.get(KEY_SEEN, []);
+      const usable = candidates.filter((p) => settings.nsfw || !p.nsfw);
+      const fresh = usable.filter((p) => !seen.includes(p.link));
+      const bySub = new Map();
+      for (const p of fresh.length ? fresh : usable) {
+        if (!bySub.has(p.sub)) bySub.set(p.sub, []);
+        bySub.get(p.sub).push(p);
+      }
+      // Pick the subreddit first so every source is equally likely, whatever its size.
+      for (let tries = 0; tries < 3 && bySub.size; tries++) {
+        const p = pick(bySub.get(pick([...bySub.keys()])));
+        try {
+          await loadImage(p.url);
+          return { url: p.url, credit: 'r/' + p.sub, link: p.link, title: p.title };
+        } catch (e) { /* image gone; try another */ }
+      }
     }
     const url = `https://picsum.photos/1600/1000?random=${Date.now()}`;
     await loadImage(url);
@@ -163,13 +212,13 @@
     const credit = $('picCredit');
     credit.textContent = pic.credit;
     credit.href = pic.link;
-    credit.title = pic.title ? pic.title.replace(/&amp;/g, '&') : '';
+    credit.title = pic.title || '';
     $('pic').hidden = false;
     modalEl.classList.add('with-pic');
     if (pic.link.includes('redd')) {
       const seen = store.get(KEY_SEEN, []);
       seen.push(pic.link);
-      store.set(KEY_SEEN, seen.slice(-200));
+      store.set(KEY_SEEN, seen.slice(-500));
     }
   }
 
@@ -266,7 +315,7 @@
       notes: new Array(81).fill(0),
       scored: new Array(81).fill(0),
       mistakes: 0,
-      hints: MAX_HINTS,
+      hints: settings.hints,
       score: 0,
       time: 0,
       status: 'playing',
@@ -686,6 +735,57 @@
     });
   }
 
+  function setHints(n) {
+    if (n === settings.hints) return;
+    if (game && game.status === 'playing') game.hints = Math.max(0, game.hints + n - settings.hints);
+    settings.hints = n;
+    store.set(KEY_SETTINGS, settings);
+    update();
+    showSettings();
+  }
+
+  /* Checks a typed subreddit and saves it when pictures can be found for it. */
+  async function checkSub(name) {
+    if (!name) return '';
+    if (!SUB_NAME.test(name)) return null;
+    const prepared = preparedSub(name);
+    if (prepared) return prepared;
+    try {
+      return (await memePosts(name)).length ? name : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function bindSubInput() {
+    const input = $('subInput');
+    const state = $('subState');
+    let timer = 0, seq = 0;
+    const validate = async () => {
+      clearTimeout(timer);
+      const name = normalizeSub(input.value);
+      const id = ++seq;
+      state.className = 'sub-state checking';
+      const result = await checkSub(name);
+      if (id !== seq) return;
+      state.className = 'sub-state ' + (result === null ? 'bad' : 'ok');
+      state.title = result === null ? 'No pictures found' : '';
+      if (result === null || result === settings.sub) return;
+      settings.sub = result;
+      store.set(KEY_SETTINGS, settings);
+      preparePicture();
+    };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      state.className = 'sub-state';
+      timer = setTimeout(validate, 700);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); validate(); input.blur(); }
+    });
+    input.addEventListener('blur', () => { if (timer) validate(); });
+  }
+
   function showSettings() {
     const rows = SETTINGS.map(([k, label]) => `
       <label class="setting">
@@ -693,17 +793,34 @@
         <input type="checkbox" data-key="${k}"${settings[k] ? ' checked' : ''}>
         <i class="switch"></i>
       </label>`).join('');
+    const subValue = (settings.sub || picSubs()[0] || '').replace(/[^A-Za-z0-9_]/g, '');
+    const hintOpts = HINT_OPTIONS.map((n) =>
+      `<button data-act="hints" data-n="${n}" class="${n === settings.hints ? 'on' : ''}">${n}</button>`).join('');
     openModal(`
       <div class="card-head">
         <h2>Settings</h2>
         <button class="icon-btn" data-act="close" aria-label="Close">${ICON_X}</button>
       </div>
-      ${rows}`);
+      ${rows}
+      <div class="setting" id="subRow"${settings.pictures ? '' : ' hidden'}>
+        <span>Subreddit</span>
+        <label class="sub-input">
+          <span>r/</span>
+          <input id="subInput" type="text" value="${subValue}" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Subreddit">
+          <i class="sub-state ok" id="subState"></i>
+        </label>
+      </div>
+      <div class="setting">
+        <span>Hints</span>
+        <div class="seg small">${hintOpts}</div>
+      </div>`, { hints: (b) => setHints(+b.dataset.n) });
+    bindSubInput();
     cardEl.querySelectorAll('input[data-key]').forEach((inp) => {
       inp.addEventListener('change', () => {
         settings[inp.dataset.key] = inp.checked;
         store.set(KEY_SETTINGS, settings);
-        if (inp.dataset.key === 'pictures') preparePicture();
+        if (inp.dataset.key === 'pictures' || inp.dataset.key === 'nsfw') preparePicture();
+        if (inp.dataset.key === 'pictures') $('subRow').hidden = !inp.checked;
         applyTheme();
         if (game && game.status === 'lost' && !settings.mistakeLimit) game.status = 'playing';
         update();
