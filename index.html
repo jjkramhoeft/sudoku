@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sudoku</title>
+  <meta name="description" content="Classic Sudoku in six difficulty levels.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem('sudoku.settings') || '{}');
+      var dark = 'dark' in s ? s.dark : matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Sudoku</div>
+    <div class="top-actions">
+    <button class="icon-btn" id="scoresBtn" aria-label="High scores">
+      <svg viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    </div>
+  </header>
+
+  <main class="game">
+    <nav class="levels" id="levels" aria-label="Difficulty"></nav>
+
+    <div class="layout">
+      <section class="play">
+        <div class="stats">
+          <div class="stat"><span class="label">Mistakes</span><b id="mistakes">0/3</b></div>
+          <div class="stat"><span class="label">Score</span><b id="score">0</b></div>
+          <div class="stat time">
+            <b id="time">00:00</b>
+            <button class="pause" id="pauseBtn" aria-label="Pause"></button>
+          </div>
+        </div>
+        <div class="board-box">
+          <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+          <div class="overlay" id="overlay" hidden>
+            <button class="play-btn" id="resumeBtn" aria-label="Resume">
+              <svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            </button>
+            <div class="spinner" id="spinner"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <div class="actions">
+          <button class="action" id="undoBtn">
+            <span class="circle"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span>
+            <span>Undo</span>
+          </button>
+          <button class="action" id="eraseBtn">
+            <span class="circle"><svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></span>
+            <span>Erase</span>
+          </button>
+          <button class="action" id="notesBtn">
+            <span class="circle"><svg viewBox="0 0 24 24"><path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.36a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg><i class="badge" id="notesBadge">OFF</i></span>
+            <span>Notes</span>
+          </button>
+          <button class="action" id="hintBtn">
+            <span class="circle"><svg viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><i class="badge" id="hintBadge">3</i></span>
+            <span>Hint</span>
+          </button>
+        </div>
+        <div class="numpad" id="numpad"></div>
+        <button class="new-game" id="newBtn">New Game</button>
+      </section>
+    </div>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="card" id="card" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script src="js/sudoku.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
