@@ -572,6 +572,31 @@ svg {
 .scores td.none { color: var(--muted); font-weight: 400; }
 .scores tr.current th { color: var(--user); font-weight: 600; }
 
+.score-help { margin-top: 12px; border-top: 1px solid var(--thin); font-size: 14px; }
+.score-help summary {
+  padding: 12px 0 2px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style-position: inside;
+}
+.score-help summary:hover { color: var(--text); }
+.score-help p { margin: 10px 0; line-height: 1.45; }
+.score-help ul { margin: 8px 0; padding-left: 18px; line-height: 1.45; }
+.score-help li + li { margin-top: 6px; }
+.score-help .formula {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--btn);
+  font-weight: 600;
+  text-align: center;
+}
+.score-help table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.score-help th, .score-help td { padding: 5px 4px; font-weight: 400; }
+.score-help th { text-align: left; }
+.score-help td { text-align: right; }
+.score-help thead th, .score-help thead td { color: var(--muted); font-size: 12px; }
+.score-help tbody tr { border-top: 1px solid var(--thin); }
+
 /* ---------- Win picture ---------- */
 
 .pic { position: absolute; inset: 0; overflow: hidden; background: #000; cursor: zoom-in; }

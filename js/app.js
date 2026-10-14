@@ -316,6 +316,7 @@
       scored: new Array(81).fill(0),
       mistakes: 0,
       hints: settings.hints,
+      hintsUsed: 0,
       score: 0,
       time: 0,
       status: 'playing',
@@ -587,6 +588,7 @@
     if (settings.autoNotes) clearPeerNotes(tx, i, d);
     commit(tx);
     game.hints--;
+    game.hintsUsed++;
     game.scored[i] = 1;
     flashUnits(i);
     if (isSolved()) return win();
@@ -614,7 +616,7 @@
 
   function winBonus() {
     const speed = PAR[game.diff] / (PAR[game.diff] + game.time);
-    const accuracy = Math.max(0, 1 - 0.2 * game.mistakes);
+    const accuracy = Math.max(0, 1 - 0.2 * (game.mistakes + game.hintsUsed));
     return Math.round((POINTS[game.diff] * 30 * speed * accuracy) / 10) * 10;
   }
 
@@ -847,6 +849,25 @@
   }
 
   let scoreRange = 'all';
+  let scoreHelpOpen = false;
+
+  function scoreHelp() {
+    const rows = DIFFS.map((d) =>
+      `<tr><th>${NAMES[d]}</th><td>${POINTS[d]}</td><td>${formatTime(PAR[d])}</td></tr>`).join('');
+    return `
+      <details class="score-help"${scoreHelpOpen ? ' open' : ''}>
+        <summary>How scores are calculated</summary>
+        <p>Every correct digit you place earns points once. Cells filled by a hint earn nothing.</p>
+        <table><thead><tr><th>Level</th><td>Per cell</td><td>Par</td></tr></thead><tbody>${rows}</tbody></table>
+        <p>Solving the puzzle adds a bonus:</p>
+        <p class="formula">per cell × 30 × speed × accuracy</p>
+        <ul>
+          <li><b>Speed</b> = par ÷ (par + your time). It's 0.5 at par and gets closer to 1 the faster you are.</li>
+          <li><b>Accuracy</b> = 1 − 0.2 for each mistake or hint used, never below 0.</li>
+        </ul>
+        <p>Only solved games count. If two scores are equal, the faster time ranks higher.</p>
+      </details>`;
+  }
 
   function showScores(range) {
     if (range) scoreRange = range;
@@ -868,9 +889,12 @@
         <button class="icon-btn" data-act="close" aria-label="Close">${ICON_X}</button>
       </div>
       <div class="seg">${tabs}</div>
-      <table class="scores"><tbody>${rows}</tbody></table>`, {
+      <table class="scores"><tbody>${rows}</tbody></table>
+      ${scoreHelp()}`, {
       range: (b) => showScores(b.dataset.range),
     });
+    const help = cardEl.querySelector('.score-help');
+    help.addEventListener('toggle', () => { scoreHelpOpen = help.open; });
     const on = cardEl.querySelector('.seg .on');
     if (on) on.focus({ preventScroll: true });
   }
@@ -940,6 +964,7 @@
   const saved = store.get(KEY_GAME, null);
   if (validSaved(saved) && saved.status === 'playing') {
     game = saved;
+    game.hintsUsed = game.hintsUsed || 0;
     update();
     fillPool();
     preparePicture();
