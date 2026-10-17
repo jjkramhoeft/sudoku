@@ -86,9 +86,9 @@
   }
 
   const RANGES = [
-    { key: 'day', name: 'Today', since: startOfDay, record: 'Best today' },
-    { key: 'week', name: 'Week', since: startOfWeek, record: 'Best this week' },
-    { key: 'all', name: 'All time', since: () => 0, record: 'New record' },
+    { key: 'day', name: 'Today', since: startOfDay, record: 'New daily record' },
+    { key: 'week', name: 'Week', since: startOfWeek, record: 'New weekly record' },
+    { key: 'all', name: 'All time', since: () => 0, record: 'New all time record' },
   ];
 
   const isBetter = (a, b) => !b || a.s > b.s || (a.s === b.s && a.t < b.t);
